@@ -386,6 +386,10 @@ void FileGenerator::GenerateSourceIncludes(io::Printer* printer) {
       "\n",
       CreateHeaderInclude(target_basename, file_));
 
+  if (!options_.transitive_pb_h) {
+    GenerateDependencyIncludes(printer);
+  }
+
   IncludeFile("net/proto2/io/public/coded_stream.h", printer);
   // TODO(gerbens) This is to include parse_context.h, we need a better way
   IncludeFile("net/proto2/public/extension_set.h", printer);
@@ -1066,10 +1070,28 @@ void FileGenerator::GenerateForwardDeclarations(io::Printer* printer) {
 
   FlattenMessagesInFile(file_, &classes);  // All messages need forward decls.
 
+  std::vector<const FieldDescriptor*> fields;
+  if (!options_.transitive_pb_h || options_.proto_h) {
+    ListAllFields(file_, &fields);
+  }
+
+  if (!options_.transitive_pb_h) {
+    // Add forward declaration for all used classes / enums defined outside the file
+    for (int i = 0; i < fields.size(); i++) {
+      const Descriptor* message_type = fields[i]->message_type();
+      if (message_type && message_type->file() != file_) {
+        classes.push_back(message_type);
+      }
+
+      const EnumDescriptor* enum_type = fields[i]->enum_type();
+      if (enum_type && enum_type->file() != file_) {
+        enums.push_back(enum_type);
+      }
+    }
+  }
+
   if (options_.proto_h) {  // proto.h needs extra forward declarations.
     // All classes / enums referred to as field members
-    std::vector<const FieldDescriptor*> fields;
-    ListAllFields(file_, &fields);
     for (int i = 0; i < fields.size(); i++) {
       classes.push_back(fields[i]->containing_type());
       classes.push_back(fields[i]->message_type());
